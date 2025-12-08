@@ -4,7 +4,7 @@ made by Matthew Robins for 4th hour computer science
 proj = console interactive program / Tetres clone
 
 
-Note the game loop is at the botom of the file  \/
+Note the game loop is at the botom of the file
 """
 from threading import Thread
 import time
@@ -26,12 +26,15 @@ textures = ["\u2588"]
 
 with open("data/blocks.json","r") as f:
     shapes = json.load(f)
+with open("data/settings/json","r") as f:
+    settings_data = json.load(f)   #  i was working on settings 
 
 def tile(color_ind):
     return f"{colors[color_ind]}{textures[0]}{textures[0]}{prin_RESET}"
 
 class Bord:
-    def __init__(self,width,height):
+    def __init__(self,width,height,color_ind=6):
+        self.background_color = color_ind
         self.width = width
         self.height = height
         self.fill(5)
@@ -61,7 +64,7 @@ class Block:
             last_color = max(((last_color + 1) % 4),1)
             self.shape["color_ind"] = last_color
         print(f"created a {self.shape["type"]}")
-        self.id = random.randint(0,99999999999)
+        self.id = f"{random.randint(0,99999999999)}_{len(all_blocks)}"
         # self.formation[self.rotation] is [(x1,y1),(x2,y2),...]  a list of all the tiles that make up the block in the current rotation
 
     def blit(self,disp):
@@ -69,7 +72,6 @@ class Block:
             square = (self.x + t[0],self.y + t[1])
             disp.bord[square]["texture"] = tile(self.shape["color_ind"])
             disp.bord[square]["owner"] = self.id
-
 
     def move(self,move_dir,disp):
         x,y = self.x,self.y
@@ -85,9 +87,8 @@ class Block:
         self.x = x
         return
             
-    def update(self,disp):
-        if self.can_move:
-            self.y += 1
+    def check_if_can_move(self,disp):
+        # self.formation[self.rotation] is [(x1,y1),(x2,y2),...]  a list of all the tiles that make up the block in the current rotation
         for t in self.formation[self.rotation]:
             square_under = (self.x + t[0],self.y + 1 + t[1])
             if square_under in disp.bord:
@@ -96,10 +97,28 @@ class Block:
             else:
                 self.can_move = False
 
+    def update(self,disp):
+        if self.can_move:
+            self.y += 1
+        self.check_if_can_move(disp)
         
-display = Bord(10,20)
+class Rules:
+    def __init__(self):
+        pass
+    
+    def check_row(self,row,disp):
+        num_of_colord_tiles = 0
+        for x in range(disp.width):
+            if disp.bord[(x,row)]["texture"] != tile(disp.background_color):
+                num_of_colord_tiles += 1
+
+        return num_of_colord_tiles
+
+
+display = Bord(width=10,height=20,color_ind=6)
 running = True
 loops = 0
+frame_dellay = 0.5
 all_blocks = []
 move = None
 last_color = random.randint(1,4)
@@ -143,9 +162,6 @@ def get_curent_block(curent_block):
          B = curent_block
     return B
 
-def check_lose():
-    for x in range(display.width):
-        pass  # ======================================= i was working on creating rool checks ===============================
 
 in_thread = Thread(target=manage_inputs,daemon=True)
 confermation = input("move; a:left / b:rite  rotate: space   press enter to play :")
@@ -154,10 +170,12 @@ curent_block = all_blocks[-1]
 in_thread.start()
 
 while running:
-    loops += 1
-    time.sleep(0.5)
-    print(f"{prin_GREEN}frame {loops}{prin_RESET}")
-    display.fill(6)
+    loops = (loops + 1) % 1000
+    time.sleep(frame_dellay)
+
+    print(f"{prin_GREEN}frame {loops}{prin_RESET} -------------------------------")
+
+    display.fill(display.background_color)
     blit_all(all_blocks)
 
     curent_block = get_curent_block(curent_block)
@@ -167,18 +185,3 @@ while running:
     display.blit()
 
 print("game over")
-
-
-"""
-def update(self,disp):
-        if self.can_move:
-            self.y += 1
-        for t in self.formation[self.rotation]:
-            square_under = (self.x + t[0],self.y + 1 + t[1])
-            if square_under in disp.bord:
-                if disp.bord[square_under] != tile(6) and disp.bord[square_under] != tile(self.shape["color_ind"]):
-                    self.can_move = False
-            else:
-                self.can_move = False
-        print(self.can_move)
-"""
