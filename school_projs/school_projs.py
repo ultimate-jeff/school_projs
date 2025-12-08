@@ -26,8 +26,9 @@ textures = ["\u2588"]
 
 with open("data/blocks.json","r") as f:
     shapes = json.load(f)
-with open("data/settings/json","r") as f:
-    settings_data = json.load(f)   #  i was working on settings 
+
+#with open("data/settings/json","r") as f:
+#    settings_data = json.load(f)   #  i was working on settings
 
 def tile(color_ind):
     return f"{colors[color_ind]}{textures[0]}{textures[0]}{prin_RESET}"
@@ -51,6 +52,10 @@ class Bord:
                 print(self.bord[(x,y)]["texture"],end="")
             print()
 
+    def fill_row(self,row,color_ind):
+        for x in range(self.width):
+            self.bord[(x,row)]["texture"] = tile(color_ind)
+
 class Block:
     def __init__(self,x,y):
         global last_color
@@ -63,7 +68,7 @@ class Block:
         if self.shape["color_ind"] == None:
             last_color = max(((last_color + 1) % 4),1)
             self.shape["color_ind"] = last_color
-        print(f"created a {self.shape["type"]}")
+        print("created a " + self.shape["type"])  # i would use f strings but pycharm did not like it
         self.id = f"{random.randint(0,99999999999)}_{len(all_blocks)}"
         # self.formation[self.rotation] is [(x1,y1),(x2,y2),...]  a list of all the tiles that make up the block in the current rotation
 
@@ -104,18 +109,30 @@ class Block:
         
 class Rules:
     def __init__(self):
-        pass
+        self.points = 0
+        self.leval = 0
+        self.alive = True
     
     def check_row(self,row,disp):
         num_of_colord_tiles = 0
         for x in range(disp.width):
             if disp.bord[(x,row)]["texture"] != tile(disp.background_color):
                 num_of_colord_tiles += 1
-
         return num_of_colord_tiles
 
+    def check_if_lost(self,disp):
+        colord_squares = self.check_row(0,disp)
+        if colord_squares >= 1:
+            self.alive = False
+
+    def check_row_cancaling(self,disp):
+        for y in range(disp.height):
+            colord_squares = self.check_row()
+            if colord_squares >= disp.width:
+                disp.fill_row(y,disp.background_color)
 
 display = Bord(width=10,height=20,color_ind=6)
+rules = Rules()
 running = True
 loops = 0
 frame_dellay = 0.5
