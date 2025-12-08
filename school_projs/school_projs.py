@@ -112,6 +112,10 @@ class Rules:
         self.points = 0
         self.leval = 0
         self.alive = True
+
+    def update(self,disp):
+        self.check_if_lost(disp)
+        self.check_row_cancaling(disp)
     
     def check_row(self,row,disp):
         num_of_colord_tiles = 0
@@ -127,9 +131,10 @@ class Rules:
 
     def check_row_cancaling(self,disp):
         for y in range(disp.height):
-            colord_squares = self.check_row()
+            colord_squares = self.check_row(y,disp)
             if colord_squares >= disp.width:
                 disp.fill_row(y,disp.background_color)
+                
 
 display = Bord(width=10,height=20,color_ind=6)
 rules = Rules()
@@ -199,6 +204,7 @@ while running:
     apply_moves(curent_block)
     curent_block.update(display)
 
+    rules.update(display)
     display.blit()
 
 print("game over")
