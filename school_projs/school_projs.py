@@ -10,6 +10,7 @@ from threading import Thread
 import time
 import random
 import json
+from turtle import color
 
 # console color map / texture map   
 # Note this i used a google serch for the color codes and the texture charicter (but i knew i wanted the black box char )
@@ -23,6 +24,7 @@ prin_gray = '\033[37m'
 colors = [prin_RESET,prin_RED,prin_GREEN,prin_BLUE,prin_orange,prin_black,prin_gray]
 orientation_map = ["north","east","south","west"]
 textures = ["\u2588"]
+error_queue = []
 
 with open("data/blocks.json","r") as f:
     shapes = json.load(f)
@@ -38,45 +40,93 @@ class Bord:
         self.background_color = color_ind
         self.width = width
         self.height = height
+        self.bord = {}
         self.fill(5)
 
+    def _set_tile(self,pos,color_ind):
+        self.bord[pos]["texture"] = tile(color_ind)
+    def _get_tile(self,pos):
+        return self.bord[pos]["texture"]
+
     def fill(self,tile_ind):
-        self.bord = {}
         for y in range(self.height):
             for x in range(self.width):
                 self.bord[(x,y)] = {"texture":tile(tile_ind),"owner":None}
         
-    def blit(self):
+    def flip(self):
         for y in range(self.height):
             for x in range(self.width):
-                print(self.bord[(x,y)]["texture"],end="")
+                print(self._get_tile((x,y)),end="")
             print()
 
     def fill_row(self,row,color_ind):
         for x in range(self.width):
-            self.bord[(x,row)]["texture"] = tile(color_ind)
+            self._set_tile((x,row),color_ind)
 
+    def _move_pixle_in_bounds(self,pos,new_pos):
+        color = self._get_tile(pos)
+        self.bord[new_pos]["texture"] = color
+        self._set_tile(pos,self.background_color)
+
+    def _snap_cords_in_bounds(self,x,y):
+        new_x = min(max(x,0),self.width)
+        new_y = min(max(y,0),self.height)
+        return new_x,new_y
+
+    def move_pixle(self,x,y,new_x,new_y):
+        x,y = self._snap_cords_in_bounds(x,y)
+        new_x,new_y = self._snap_cords_in_bounds(new_x,new_y)
+        self._move_pixle_in_bounds((x,y),(new_x,new_y))
+                
+    def place_pixle(self,x,y,color_ind):
+        x,y = self._snap_cords_in_bounds(x,y)
+        self._set_tile((x,y),color_ind)
+
+    def check_if_can_move(self,list_of_positions,dx,dy,X=0,Y=0):
+        can_move = True
+        for p in list_of_positions:
+            x,y = p[0]+X,p[1]+Y
+            target_x,target_y = (x+dx),(y+dy)
+            target = self._get_tile((target_x,target_y))
+            if target != tile(self.background_color):
+                can_move = False
+        return can_move
+
+    def _move_tiles(self,list_of_positions,dx,dy,X=0,Y=0):
+        for p in list_of_positions:
+            x,y = p[0]+X,p[1]+Y
+            target_x,target_y = (x+dx),(y+dy)
+            self.move_pixle(x,y,target_x,target_y)
+
+    def move_shape(self,list_of_positions,dx,dy,X=0,Y=0):
+        can_move = self.check_if_can_move(list_of_positions,dx,dy,X=X,Y=Y)
+        if can_move:
+            self._move_tiles(list_of_positions,dx,dy,X=X,Y=Y)
+
+    def place_shape(self,list_of_positions,X,Y,color_ind):
+        for p in list_of_positions:
+            x,y = p[0]+X,p[1]+Y
+            self.place_pixle(x,y,color_ind)
+        
 class Block:
     def __init__(self,x,y):
         global last_color
+        self.can_move = True
         self.x = x
         self.y = y
-        self.can_move = True
         self.rotation = "north"
         self.shape = random.choice(shapes["blocks"])
-        self.formation = self.shape["formation"]
+        self.formation = self.shape["formation"]  # self.formation[self.rotation] is [(x1,y1),(x2,y2),...]
         if self.shape["color_ind"] == None:
             last_color = max(((last_color + 1) % 4),1)
-            self.shape["color_ind"] = last_color
-        print("created a " + self.shape["type"])  # i would use f strings but pycharm did not like it
-        self.id = f"{random.randint(0,99999999999)}_{len(all_blocks)}"
-        # self.formation[self.rotation] is [(x1,y1),(x2,y2),...]  a list of all the tiles that make up the block in the current rotation
+        self.color_ind = last_color
+        display.place_shape(self.formation[self.rotation],x,y,self.color_ind)
 
-    def blit(self,disp):
-        for t in self.formation[self.rotation]:
-            square = (self.x + t[0],self.y + t[1])
-            disp.bord[square]["texture"] = tile(self.shape["color_ind"])
-            disp.bord[square]["owner"] = self.id
+    def update(self):
+        self.y += gravaty
+        if self.y > display.height:
+            self.can_move = False
+        display.move_shape(self.formation[self.rotation],0,gravaty,X=self.x,Y=self.y)
 
     def move(self,move_dir,disp):
         x,y = self.x,self.y
@@ -90,64 +140,27 @@ class Block:
             if squarex < 0 or squarex >= disp.width:
                 return
         self.x = x
-        return
-            
-    def check_if_can_move(self,disp):
-        # self.formation[self.rotation] is [(x1,y1),(x2,y2),...]  a list of all the tiles that make up the block in the current rotation
-        for t in self.formation[self.rotation]:
-            square_under = (self.x + t[0],self.y + 1 + t[1])
-            if square_under in disp.bord:
-                if disp.bord[square_under]["owner"] != self.id and disp.bord[square_under]["texture"] != tile(6):
-                    self.can_move = False
-            else:
-                self.can_move = False
-
-    def update(self,disp):
-        if self.can_move:
-            self.y += 1
-        self.check_if_can_move(disp)
-        
+             
 class Rules:
     def __init__(self):
         self.points = 0
         self.leval = 0
         self.alive = True
+        self.activate_dellay = 0
 
     def update(self,disp):
-        self.check_if_lost(disp)
-        self.check_row_cancaling(disp)
-    
-    def check_row(self,row,disp):
-        num_of_colord_tiles = 0
-        for x in range(disp.width):
-            if disp.bord[(x,row)]["texture"] != tile(disp.background_color):
-                num_of_colord_tiles += 1
-        return num_of_colord_tiles
-
-    def check_if_lost(self,disp):
-        colord_squares = self.check_row(0,disp)
-        if colord_squares >= 1:
-            self.alive = False
-
-    def check_row_cancaling(self,disp):
-        for y in range(disp.height):
-            colord_squares = self.check_row(y,disp)
-            if colord_squares >= disp.width:
-                disp.fill_row(y,disp.background_color)
+        pass
                 
 
 display = Bord(width=10,height=20,color_ind=6)
 rules = Rules()
 running = True
 loops = 0
-frame_dellay = 0.5
+frame_dellay = 0.3
+gravaty = 1
 all_blocks = []
 move = None
 last_color = random.randint(1,4)
-
-def blit_all(all_b):
-    for b in all_b:
-        b.blit(display)
 
 def manage_inputs():
     global move,running
@@ -178,33 +191,33 @@ def apply_moves(block):
 def get_curent_block(curent_block):
     global all_blocks
     if not curent_block.can_move:
-        B = Block(int(display.width/2),1)
+        B = Block(int(display.width/2),0)
         all_blocks.append(B)
     else:
          B = curent_block
     return B
 
+def update_all(all_b):
+    for b in all_b:
+        b.update()
 
 in_thread = Thread(target=manage_inputs,daemon=True)
 confermation = input("move; a:left / b:rite  rotate: space   press enter to play :")
-all_blocks.append(Block(int(display.width/2),1))
+all_blocks.append(Block(int(display.width/2),0))
 curent_block = all_blocks[-1]
 in_thread.start()
 
 while running:
     loops = (loops + 1) % 1000
+    display.fill(display.background_color)
     time.sleep(frame_dellay)
 
+
+    update_all(all_blocks)
     print(f"{prin_GREEN}frame {loops}{prin_RESET} -------------------------------")
-
-    display.fill(display.background_color)
-    blit_all(all_blocks)
-
     curent_block = get_curent_block(curent_block)
     apply_moves(curent_block)
-    curent_block.update(display)
 
-    rules.update(display)
-    display.blit()
-
+    
+    display.flip()
 print("game over")
