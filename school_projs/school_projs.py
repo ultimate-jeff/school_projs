@@ -44,9 +44,11 @@ class Bord:
         self.fill(5)
 
     def _set_tile(self,pos,color_ind):
-        self.bord[pos]["texture"] = tile(color_ind)
+        x,y = self._snap_cords_in_bounds(pos[0],pos[1])
+        self.bord[(x,y)]["texture"] = tile(color_ind)
     def _get_tile(self,pos):
-        return self.bord[pos]["texture"]
+        x,y = self._snap_cords_in_bounds(pos[0],pos[1])
+        return self.bord[(x,y)]["texture"]
 
     def fill(self,tile_ind):
         for y in range(self.height):
@@ -69,8 +71,8 @@ class Bord:
         self._set_tile(pos,self.background_color)
 
     def _snap_cords_in_bounds(self,x,y):
-        new_x = min(max(x,0),self.width)
-        new_y = min(max(y,0),self.height)
+        new_x = min(max(x,0),self.width-1)
+        new_y = min(max(y,0),self.height-1)
         return new_x,new_y
 
     def move_pixle(self,x,y,new_x,new_y):
