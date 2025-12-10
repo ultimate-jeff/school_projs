@@ -49,6 +49,12 @@ class Bord:
     def _get_tile(self,pos):
         x,y = self._snap_cords_in_bounds(pos[0],pos[1])
         return self.bord[(x,y)]["texture"]
+    def _get_tile_owner(self,pos):
+        x,y = self._snap_cords_in_bounds(pos[0],pos[1])
+        return self.bord[(x,y)]["owner"]
+    def _set_tile_owner(self,pos,owner):
+        x,y = self._snap_cords_in_bounds(pos[0],pos[1])
+        self.bord[(x,y)]["owner"] = owner
 
     def fill(self,tile_ind):
         for y in range(self.height):
@@ -67,8 +73,8 @@ class Bord:
 
     def _move_pixle_in_bounds(self,pos,new_pos):
         color = self._get_tile(pos)
-        self.bord[new_pos]["texture"] = color
         self._set_tile(pos,self.background_color)
+        self.bord[new_pos]["texture"] = color
 
     def _snap_cords_in_bounds(self,x,y):
         new_x = min(max(x,0),self.width-1)
@@ -85,30 +91,29 @@ class Bord:
         self._set_tile((x,y),color_ind)
 
     def check_if_can_move(self,list_of_positions,dx,dy,X=0,Y=0):
+        # pacial flail
         can_move = True
         for p in list_of_positions:
             x,y = p[0]+X,p[1]+Y
             target_x,target_y = (x+dx),(y+dy)
             target = self._get_tile((target_x,target_y))
-            if target != tile(self.background_color):
+            target_owner = self._get_tile_owner((target_x,target_y))
+            if target_owner != None and target != tile(self.background_color) and (target_x,target_y) in self.bord:
                 can_move = False
         return can_move
 
-    def _move_tiles(self,list_of_positions,dx,dy,X=0,Y=0):
-        for p in list_of_positions:
-            x,y = p[0]+X,p[1]+Y
-            target_x,target_y = (x+dx),(y+dy)
-            self.move_pixle(x,y,target_x,target_y)
-
-    def move_shape(self,list_of_positions,dx,dy,X=0,Y=0):
-        can_move = self.check_if_can_move(list_of_positions,dx,dy,X=X,Y=Y)
-        if can_move:
-            self._move_tiles(list_of_positions,dx,dy,X=X,Y=Y)
-
-    def place_shape(self,list_of_positions,X,Y,color_ind):
+    def place_shape(self,list_of_positions,X,Y,color_ind,owner=None):
         for p in list_of_positions:
             x,y = p[0]+X,p[1]+Y
             self.place_pixle(x,y,color_ind)
+            self._set_tile_owner((x,y),owner)
+
+    def remove_shape(self,list_of_positions,X,Y,color_ind):
+        for p in list_of_positions:
+            x,y = p[0]+X,p[1]+Y
+            if self._get_tile((x,y)) == tile(color_ind):
+                self._set_tile((x,y),self.background_color)
+                self._set_tile_owner((x,y),owner=None)
         
 class Block:
     def __init__(self,x,y):
@@ -116,32 +121,47 @@ class Block:
         self.can_move = True
         self.x = x
         self.y = y
+        self.next_x = self.x
+        self.next_y = self.y
         self.rotation = "north"
         self.shape = random.choice(shapes["blocks"])
         self.formation = self.shape["formation"]  # self.formation[self.rotation] is [(x1,y1),(x2,y2),...]
         if self.shape["color_ind"] == None:
             last_color = max(((last_color + 1) % 4),1)
         self.color_ind = last_color
-        display.place_shape(self.formation[self.rotation],x,y,self.color_ind)
+        self.id = f"{random.randint(0,99999)}_{len(all_blocks)}"
+        display.place_shape(self.formation[self.rotation],x,y,self.color_ind,owner=self.id)
 
     def update(self):
-        self.y += gravaty
         if self.y > display.height:
             self.can_move = False
-        display.move_shape(self.formation[self.rotation],0,gravaty,X=self.x,Y=self.y)
+        display.remove_shape(self.formation[self.rotation],self.x,self.y,self.color_ind)
+        self.can_move = display.check_if_can_move(self.formation[self.rotation],0,gravaty,self.x,self.y)  
+        if self.can_move:
+            self.y += gravaty  # i was working on fixing colisions (i was having probs with snaping and colision detection)
+            self.apply_moves()
+        display.place_shape(self.formation[self.rotation],self.x,self.y,self.color_ind,owner=self.id)
 
     def move(self,move_dir,disp):
-        x,y = self.x,self.y
         if move_dir == "left":
-            x -= 1
+            self.x -= 1
         elif move_dir == "rite":
-            x += 1
+            self.x += 1
         for t in self.formation[self.rotation]:
-            squarex = x + t[0]
-            squarey = y + t[1]
+            squarex = self.x + t[0]
+            squarey = self.y + t[1]
             if squarex < 0 or squarex >= disp.width:
                 return
-        self.x = x
+
+    def apply_moves(self):
+        global move,display
+        if self.can_move:
+            self.move(move,display)
+            if move == "rotate":
+                curent_rotation = orientation_map.index(self.rotation)
+                new_rotation = (curent_rotation + 1) % 4
+                self.rotation = orientation_map[new_rotation]
+        move = None
              
 class Rules:
     def __init__(self):
@@ -180,16 +200,6 @@ def manage_inputs():
             move = None
     time.sleep(0.1)
 
-def apply_moves(block):
-    global move,display
-    if block.can_move:
-        block.move(move,display)
-        if move == "rotate":
-            curent_rotation = orientation_map.index(block.rotation)
-            new_rotation = (curent_rotation + 1) % 4
-            block.rotation = orientation_map[new_rotation]
-    move = None
-
 def get_curent_block(curent_block):
     global all_blocks
     if not curent_block.can_move:
@@ -208,18 +218,34 @@ confermation = input("move; a:left / b:rite  rotate: space   press enter to play
 all_blocks.append(Block(int(display.width/2),0))
 curent_block = all_blocks[-1]
 in_thread.start()
-
+display.fill(display.background_color)
 while running:
     loops = (loops + 1) % 1000
     display.fill(display.background_color)
     time.sleep(frame_dellay)
 
 
-    update_all(all_blocks)
+    #update_all(all_blocks)
     print(f"{prin_GREEN}frame {loops}{prin_RESET} -------------------------------")
     curent_block = get_curent_block(curent_block)
-    apply_moves(curent_block)
+    curent_block.apply_moves()
+    curent_block.update()
 
     
     display.flip()
 print("game over")
+
+"""
+
+def update(self):
+        self.can_move = display.check_if_can_move(self.formation[self.rotation],0,gravaty,self.x,self.y)
+        if self.y > display.height:
+            self.can_move = False
+        if self.can_move:
+            display.remove_shape(self.formation[self.rotation],self.x,self.y,self.color_ind)
+            self.y += gravaty
+            self.apply_moves()
+            display.place_shape(self.formation[self.rotation],self.x,self.y,self.color_ind,owner=self.id)
+
+
+"""
